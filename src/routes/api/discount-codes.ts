@@ -22,6 +22,9 @@
  *
  * The endpoint reads ONLY from Netlify Blobs. It never sees the user's
  * Stripe secret key.
+ *
+ * `handle` is exported so the test suite can drive it directly without
+ * spinning up the full TanStack Start runtime.
  */
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
@@ -53,7 +56,7 @@ async function extractApiKey(request: Request): Promise<string | null> {
   return m?.[1]?.trim() ?? null
 }
 
-async function handle(request: Request): Promise<Response> {
+export async function handle(request: Request): Promise<Response> {
   let raw: unknown
   try {
     raw = await request.json()
@@ -80,7 +83,8 @@ async function handle(request: Request): Promise<Response> {
     return jsonResponse(
       {
         error: 'unauthorized',
-        message: 'Provide an API key via X-API-Key header or "Authorization: Bearer <token>".',
+        message:
+          'Provide an API key via X-API-Key header or "Authorization: Bearer <token>".',
       },
       { status: 401 },
     )

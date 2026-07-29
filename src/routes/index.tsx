@@ -26,6 +26,7 @@ import {
   useValidateKey,
 } from '#/features/stripe/hooks/use-discount-codes'
 import { usePublishCouponSnapshot } from '#/features/api/hooks/use-publish-coupon-snapshot'
+import { discountCodeRepository } from '#/features/stripe/repositories/discount-code-repository'
 import {
   usePreferencesQuery,
 } from '#/features/stripe/hooks/use-workspaces'

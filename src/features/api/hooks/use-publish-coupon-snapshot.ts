@@ -31,7 +31,6 @@ function toSnapshotCoupon(c: DiscountCode) {
     maxRedemptions: c.maxRedemptions,
     timesRedeemed: c.timesRedeemed,
     redeemBy: c.redeemBy ?? null,
-    expiresAt: c.redeemBy ?? null,
     active: c.active,
     createdAt: c.createdAt,
     stripe: {

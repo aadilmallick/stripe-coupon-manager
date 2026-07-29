@@ -28,8 +28,7 @@ export const DiscountSnapshotCouponSchema = z.object({
   maxRedemptions: z.number().int().min(1).optional(),
   timesRedeemed: z.number().int().min(0),
   /** Optional ISO timestamp — null when the code never expires. */
-  redeemBy: z.string().nullable().optional(),
-  expiresAt: z.string().nullable(),
+  redeemBy: z.string().nullable(),
   active: z.boolean(),
   createdAt: z.string(),
   /**

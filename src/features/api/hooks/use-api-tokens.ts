@@ -14,9 +14,9 @@ import {
   loadApiTokens,
   markTokenRevoked,
   forgetApiToken,
+  setApiTokens,
 } from '#/storage/api-token-meta-store'
 import type { ApiTokenMeta } from '#/server/types'
-import { useAdminSecret } from './use-admin-secret'
 
 export const apiTokensMetaKey = ['api-tokens-meta'] as const
 
@@ -115,7 +115,7 @@ export function useReconcileApiTokens(enabled: boolean) {
           ? { ...m, revoked: s.revokedAt != null }
           : m
       })
-      await (await import('#/storage/api-token-meta-store')).setApiTokens(merged)
+      await setApiTokens(merged)
       qc.setQueryData(apiTokensMetaKey, merged)
       return merged
     },

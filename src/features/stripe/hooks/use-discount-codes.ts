@@ -41,7 +41,7 @@ export function useDiscountCodes(ctx: SelectedWorkspaceContext | null) {
     return () => {
       cancelled = true
     }
-  }, [ctx, qc])
+  }, [ctx?.workspace.id, ctx?.environment, qc])
 
   return useQuery<DiscountCode[]>({
     queryKey: ctx

@@ -5,6 +5,9 @@
  *
  * Stripe secret keys never reach this function — the snapshot already
  * contains everything an external consumer needs.
+ *
+ * The handler accepts `unknown` and re-validates with the Zod schema so
+ * the test suite can drive validation directly.
  */
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
@@ -16,17 +19,24 @@ const PublishSchema = z.object({
   snapshot: CouponSnapshotSchema,
 })
 
+export type PublishSnapshotInput = z.infer<typeof PublishSchema>
+
+export async function publishCouponSnapshotHandler(
+  input: unknown,
+): Promise<{ ok: true; publishedAt: string }> {
+  const data = PublishSchema.parse(input)
+  const expected = process.env.ADMIN_PUBLISH_SECRET?.trim()
+  if (!expected || data.auth !== expected) {
+    throw new Error('Unauthorized.')
+  }
+  const publishedAt = new Date().toISOString()
+  await writeSnapshot({
+    ...data.snapshot,
+    publishedAt,
+  })
+  return { ok: true, publishedAt }
+}
+
 export const publishCouponsSnapshotServerFn = createServerFn({ method: 'POST' })
   .validator((d: unknown) => PublishSchema.parse(d))
-  .handler(async ({ data }) => {
-    const expected = process.env.ADMIN_PUBLISH_SECRET?.trim()
-    if (!expected || data.auth !== expected) {
-      throw new Error('Unauthorized.')
-    }
-    const publishedAt = new Date().toISOString()
-    await writeSnapshot({
-      ...data.snapshot,
-      publishedAt,
-    })
-    return { ok: true as const, publishedAt }
-  })
+  .handler(async ({ data }) => publishCouponSnapshotHandler(data))
