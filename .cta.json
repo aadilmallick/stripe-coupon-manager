@@ -1,0 +1,21 @@
+{
+  "projectName": "stripe-coupon-manager",
+  "mode": "file-router",
+  "typescript": true,
+  "packageManager": "npm",
+  "includeExamples": false,
+  "tailwind": true,
+  "projectPreset": "default",
+  "addOnOptions": {},
+  "git": true,
+  "install": true,
+  "intent": true,
+  "routerOnly": false,
+  "version": 1,
+  "framework": "react",
+  "chosenAddOns": [
+    "eslint",
+    "netlify",
+    "shadcn"
+  ]
+}
