@@ -25,6 +25,7 @@ import {
   useDiscountCodes,
   useValidateKey,
 } from '#/features/stripe/hooks/use-discount-codes'
+import { usePublishCouponSnapshot } from '#/features/api/hooks/use-publish-coupon-snapshot'
 import {
   usePreferencesQuery,
 } from '#/features/stripe/hooks/use-workspaces'
@@ -41,6 +42,7 @@ function DiscountCodesPage() {
   const discountQuery = useDiscountCodes(ctx)
   const keyQuery = useValidateKey(ctx)
   const qc = useQueryClient()
+  const publish = usePublishCouponSnapshot()
   const [createOpen, setCreateOpen] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<DiscountCode | null>(null)
   const [highlightId, setHighlightId] = useState<string | null>(null)
@@ -67,11 +69,38 @@ function DiscountCodesPage() {
 
   async function onRefresh() {
     if (!ctx) return
+    const fetchedAt = new Date().toISOString()
     try {
-      await qc.invalidateQueries({
+      // 1. Pull a fresh list from Stripe (writes to IndexedDB cache as
+      //    a side effect of the queryFn).
+      const fresh = await qc.fetchQuery<DiscountCode[]>({
         queryKey: discountCodesKey(ctx.workspace.id, ctx.environment),
+        queryFn: ({ signal }) =>
+          discountCodeRepository.list(ctx.environment, ctx.apiKey, signal),
       })
+      qc.setQueryData<DiscountCode[]>(
+        discountCodesKey(ctx.workspace.id, ctx.environment),
+        fresh,
+      )
       toast.success('Synced with Stripe')
+      // 2. Mirror to Netlify Blobs so the public API endpoint serves the
+      //    latest data. Best-effort — local cache is still up-to-date.
+      const result = await publish.mutateAsync({
+        workspaceId: ctx.workspace.id,
+        workspaceName: ctx.workspace.name,
+        environment: ctx.environment,
+        codes: fresh,
+        fetchedAt,
+      })
+      if (!result.ok && result.reason === 'no-secret') {
+        toast.info('Synced locally. Set admin secret in Settings to publish snapshots.', {
+          description: result.error,
+        })
+      } else if (!result.ok) {
+        toast.warning('Synced locally, but the public snapshot was not published.', {
+          description: result.error,
+        })
+      }
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : 'Could not refresh from Stripe',

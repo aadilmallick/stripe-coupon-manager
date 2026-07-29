@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { discountCodeRepository } from '#/features/stripe/repositories/discount-code-repository'
 import type {
@@ -5,6 +6,10 @@ import type {
   DiscountCode,
 } from '#/features/stripe/types/discount-code'
 import type { SelectedWorkspaceContext } from './use-current-selection'
+import {
+  loadCachedCoupons,
+  saveCachedCoupons,
+} from '#/storage/coupon-cache-store'
 
 export function discountCodesKey(workspaceId: string, environment: string) {
   return ['discount-codes', workspaceId, environment] as const
@@ -15,13 +20,44 @@ export function keyValidationKey(workspaceId: string, environment: string) {
 }
 
 export function useDiscountCodes(ctx: SelectedWorkspaceContext | null) {
+  const qc = useQueryClient()
+
+  // Hydrate from IndexedDB cache on workspace/environment change so the
+  // table renders instantly while a fresh Stripe fetch runs in the
+  // background.
+  useEffect(() => {
+    if (!ctx) return
+    const cacheKey = discountCodesKey(ctx.workspace.id, ctx.environment)
+    if (qc.getQueryData(cacheKey)) return
+    let cancelled = false
+    loadCachedCoupons(ctx.workspace.id, ctx.environment)
+      .then((cached) => {
+        if (cancelled || !cached) return
+        qc.setQueryData(cacheKey, cached.codes)
+      })
+      .catch(() => {
+        /* cache unavailable — fine */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [ctx, qc])
+
   return useQuery<DiscountCode[]>({
     queryKey: ctx
       ? discountCodesKey(ctx.workspace.id, ctx.environment)
       : ['discount-codes', 'idle'],
-    queryFn: ({ signal }) => {
+    queryFn: async ({ signal }) => {
       if (!ctx) throw new Error('No active workspace')
-      return discountCodeRepository.list(ctx.environment, ctx.apiKey, signal)
+      const fresh = await discountCodeRepository.list(
+        ctx.environment,
+        ctx.apiKey,
+        signal,
+      )
+      // Mirror to IndexedDB so reloads/refreshes are instant and so the
+      // publish step has authoritative data.
+      void saveCachedCoupons(ctx.workspace.id, ctx.environment, fresh)
+      return fresh
     },
     enabled: Boolean(ctx),
     staleTime: 30_000,

@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#/com
 import { Badge } from '#/components/ui/badge'
 import { WorkspaceDialog } from '#/components/workspaces/workspace-dialog'
 import { EmailWorkspaceDialog } from '#/components/workspaces/email-workspace-dialog'
+import { AdminSecretCard } from '#/components/settings/admin-secret-card'
+import { ApiTokensCard } from '#/components/settings/api-tokens-card'
 import {
   useDeleteWorkspace,
   usePreferencesQuery,
@@ -327,6 +329,10 @@ function SettingsPage() {
         </CardContent>
       </Card>
 
+      <AdminSecretCard />
+
+      <ApiTokensCard workspaces={list} />
+
       <Card className="p-0">
         <CardHeader>
           <CardTitle>Privacy</CardTitle>
@@ -335,8 +341,9 @@ function SettingsPage() {
         <CardContent className="flex flex-col gap-2 text-sm text-[var(--sea-ink-soft)]">
           <p>• All Stripe API calls are made directly from this browser to api.stripe.com.</p>
           <p>• No analytics, no telemetry, no third-party tracking.</p>
-          <p>• Workspace keys are persisted to IndexedDB via localForage.</p>
-          <p>• Discount codes are not cached — they are always fetched live from Stripe.</p>
+          <p>• Workspace keys, the admin secret, and a local-mirror snapshot of your coupons are persisted to IndexedDB via localForage.</p>
+          <p>• On every Refresh, the browser publishes the latest coupon snapshot to a Netlify Blob. The data <em>does not</em> include Stripe keys — only what an external app would need.</p>
+          <p>• External consumers can read the latest snapshot via <code className="font-mono">POST /api/discount-codes</code> with an API token you create here.</p>
           <p>• Email sending happens server-side through a Netlify function; Resend credentials live in Netlify env vars and never reach the browser.</p>
         </CardContent>
       </Card>
