@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as DocsRouteImport } from './routes/docs'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ApiDiscountCodesRouteImport } from './routes/api/discount-codes'
 
@@ -22,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -38,12 +44,14 @@ const ApiDiscountCodesRoute = ApiDiscountCodesRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/docs': typeof DocsRoute
   '/settings': typeof SettingsRoute
   '/api/discount-codes': typeof ApiDiscountCodesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/docs': typeof DocsRoute
   '/settings': typeof SettingsRoute
   '/api/discount-codes': typeof ApiDiscountCodesRoute
 }
@@ -51,20 +59,23 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/docs': typeof DocsRoute
   '/settings': typeof SettingsRoute
   '/api/discount-codes': typeof ApiDiscountCodesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/settings' | '/api/discount-codes'
+  fullPaths: '/' | '/about' | '/docs' | '/settings' | '/api/discount-codes'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/settings' | '/api/discount-codes'
-  id: '__root__' | '/' | '/about' | '/settings' | '/api/discount-codes'
+  to: '/' | '/about' | '/docs' | '/settings' | '/api/discount-codes'
+  id:
+    '__root__' | '/' | '/about' | '/docs' | '/settings' | '/api/discount-codes'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  DocsRoute: typeof DocsRoute
   SettingsRoute: typeof SettingsRoute
   ApiDiscountCodesRoute: typeof ApiDiscountCodesRoute
 }
@@ -83,6 +94,13 @@ declare module '@tanstack/react-router' {
       path: '/about'
       fullPath: '/about'
       preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -105,6 +123,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  DocsRoute: DocsRoute,
   SettingsRoute: SettingsRoute,
   ApiDiscountCodesRoute: ApiDiscountCodesRoute,
 }

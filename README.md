@@ -246,13 +246,21 @@ A coupon is **not available** if any of these hold: `active === false`, redempti
 import type { SnapshotCoupon } from './types' // wherever you declared the consumer types
 
 /**
- * Returns `true` only when a coupon can still be redeemed:
- *  - `active` must be `true` (the underlying Stripe promotion code is on)
- *  - `timesRedeemed` must be strictly less than `maxRedemptions`
- *    when `maxRedemptions` is set
- *  - the current time must be before `redeemBy` when `redeemBy` is set
+ * Indicates whether a coupon from the public snapshot is still redeemable.
  *
- * Pass `now` to make tests deterministic.
+ * A coupon is considered available only when ALL of the following hold:
+ *  - `active` is `true` (the underlying Stripe promotion code is on)
+ *  - `timesRedeemed` is strictly less than `maxRedemptions` when the cap
+ *    is set
+ *  - the current time is strictly before `redeemBy` when the expiry is set
+ *
+ * The function never throws — it returns a boolean and is safe to call
+ * inside any UI conditional.
+ *
+ * @param coupon - The snapshot coupon to check.
+ * @param now - Override the current time. Useful for deterministic tests;
+ *   defaults to `new Date()`.
+ * @returns `true` if the coupon can still be redeemed, `false` otherwise.
  */
 export function isAvailable(
   coupon: SnapshotCoupon,
@@ -279,6 +287,15 @@ export function isAvailable(
 ```ts
 import type { Snapshot, SnapshotCoupon } from './types'
 
+/**
+ * Returns a new array of coupons that still satisfy {@link isAvailable}.
+ *
+ * The input `snapshot` is not mutated; the result is a fresh array.
+ *
+ * @param snapshot - The full snapshot returned by `/api/discount-codes`.
+ * @returns A new array of coupons that are still redeemable. Empty when
+ *   no coupons are available.
+ */
 export function getAvailableCoupons(snapshot: Snapshot): SnapshotCoupon[] {
   return snapshot.coupons.filter(isAvailable)
 }
@@ -287,10 +304,28 @@ export function getAvailableCoupons(snapshot: Snapshot): SnapshotCoupon[] {
 #### Use it before creating a Checkout Session
 
 ```ts
+/**
+ * Looks up the user-entered promo code in the snapshot and creates the
+ * Stripe Checkout Session that applies it.
+ *
+ * Pass `customerEmail` to pre-fill the email field on the Checkout page.
+ * The `expires_at` is converted from `redeemBy` (ISO) to the unix-seconds
+ * format Stripe expects.
+ *
+ * @param args - The current snapshot, the user-entered promo code, and
+ *   an optional pre-filled customer email.
+ * @returns The created Stripe Checkout Session object.
+ * @throws {Error} `"Promo \"<code>\" is inactive, capped, or expired"`
+ *   when the code is not in `getAvailableCoupons(snapshot)`. The string
+ *   is user-safe to render.
+ * @throws {Stripe.errors.StripeError} Any error Stripe throws from
+ *   `stripe.checkout.sessions.create(...)`.
+ */
 async function createCheckoutForPromo(args: {
   snapshot: Snapshot
   promoCode: string
-}) {
+  customerEmail?: string
+}): Promise<unknown> {
   const match = getAvailableCoupons(args.snapshot).find(
     (c) => c.code === args.promoCode,
   )
@@ -305,6 +340,7 @@ async function createCheckoutForPromo(args: {
   return stripe.checkout.sessions.create({
     mode: 'payment',
     line_items: [{ price: 'price_…', quantity: 1 }],
+    customer_email: args.customerEmail,
     discounts: match.stripe.checkout_integration.discounts,
     ...(expiresAt ? { expires_at: expiresAt } : {}),
     success_url: 'https://example.com/checkout/success',
@@ -320,14 +356,34 @@ If you want the manager app to drive a "best available discount" UI (e.g. auto-a
 ```ts
 import type { Snapshot, SnapshotCoupon } from './types'
 
-/** Returns the value of the discount as a rough comparable number. */
+/**
+ * Returns a comparable magnitude for a coupon's discount.
+ *
+ * For percent discounts, returns `percentOff` (1-100). For amount
+ * discounts, returns `amountOff` in integer cents. Cross-currency
+ * comparisons are NOT meaningful — pre-filter by `currency` before
+ * calling {@link pickBestDiscount} if your workspace mixes currencies.
+ *
+ * @param c - The snapshot coupon.
+ * @returns The raw magnitude: percent points or minor units.
+ */
 function discountValue(c: SnapshotCoupon): number {
   if (c.discount.type === 'percent') return c.discount.percentOff ?? 0
-  // Amount discounts are not directly comparable across currencies, so we
-  // expose the cents value and let the caller decide if currencies match.
   return c.discount.amountOff ?? 0
 }
 
+/**
+ * Picks the highest-value active coupon in the snapshot.
+ *
+ * Reuses {@link isAvailable} to filter out inactive / capped / expired
+ * coupons and then reduces by {@link discountValue}. Currency-blind for
+ * amount discounts — pre-filter by `currency` if your workspace mixes
+ * currencies.
+ *
+ * @param snapshot - The full snapshot from `/api/discount-codes`.
+ * @returns The best available coupon, or `null` when no coupon in the
+ *   snapshot passes {@link isAvailable}.
+ */
 export function pickBestDiscount(snapshot: Snapshot): SnapshotCoupon | null {
   const available = getAvailableCoupons(snapshot)
   if (available.length === 0) return null
@@ -338,6 +394,40 @@ export function pickBestDiscount(snapshot: Snapshot): SnapshotCoupon | null {
 ```
 
 ⚠️ Amount-discount comparisons are currency-blind on purpose. If your workspace mixes currencies, filter by `currency` before calling `pickBestDiscount`.
+
+#### License & attribution
+
+These helpers originated in the Stripe Coupon Manager (MIT). If you copy them into a downstream TypeScript library, keep this license header so the attribution travels with the code:
+
+```ts
+// SPDX-License-Identifier: MIT
+//
+// Helpers for working with the `/api/discount-codes` snapshot published
+// by the Stripe Coupon Manager. Adapted from the manager's README.
+//
+// Source: https://github.com/<your-fork>/stripe-coupon-manager
+// Copyright (c) <year> <copyright-holder>
+//
+// Permission is hereby granted, free of charge, to any person obtaining
+// a copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to
+// permit persons to whom the Software is furnished to do so, subject
+// to the following conditions:
+//
+// The above copyright notice and this permission notice shall be
+// included in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+// BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+// ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+// CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+```
 
 ### Error envelopes
 

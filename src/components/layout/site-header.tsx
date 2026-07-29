@@ -10,6 +10,7 @@ interface NavItem {
 const nav: NavItem[] = [
   { to: '/', label: 'Discount codes' },
   { to: '/settings', label: 'Settings' },
+  { to: '/docs', label: 'API docs' },
   { to: '/about', label: 'About' },
 ]
 
