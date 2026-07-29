@@ -467,17 +467,89 @@ The Stripe secret key never reaches Netlify — the public function only knows w
 
 ---
 
+## Managing API tokens
+
+API tokens are the **client-side credentials you hand to consumer apps** so they can call `POST /api/discount-codes` from their own backend. They're read-only, scoped to one workspace + environment, and shown to you **plaintext exactly once** — the server only stores their SHA-256 hash.
+
+### Generate a strong admin secret
+
+You'll enter the same value in two places (Netlify **and** the in-app Settings card). Make it strong, because anyone who has it can issue or revoke tokens for your project.
+
+```bash
+openssl rand -hex 32     # → 64-char hex string, e.g. 9f0c…a4dd
+```
+
+Save this value somewhere safe (1Password, Bitwarden, etc.). You'll paste it in the next two steps.
+
+### Wire it up end-to-end
+
+There are **two** places the secret has to be entered and the values must be **byte-identical** (server-side Netlify env + client-side IndexedDB):
+
+1. **Netlify (server)**
+   - Open your site in the Netlify dashboard.
+   - **Site settings → Environment variables → Add a variable**.
+   - Key: `ADMIN_PUBLISH_SECRET`.
+   - Value: paste the hex string from step above.
+   - Scope: **All scopes** (or at minimum `Production`; add `Deploy previews` if you want it on PR builds).
+   - **Trigger a deploy** (or wait for the next one) — env vars only take effect after a fresh deploy.
+
+2. **Manager app (this device)**
+   - Open the app → **Settings → Public API admin secret**.
+   - Paste the **same** hex string into the input.
+   - Click **Save** (it lives in this browser's IndexedDB).
+
+3. **Issue a token**
+   - Still in **Settings**, scroll to **API tokens**.
+   - Pick the workspace (the token will be scoped to that workspace) and a human-readable name (e.g. `acme-staging-readonly`).
+   - Click **Create token** → a `dcm_…` plaintext string is shown one time. Copy it now; it is **never displayed again**.
+
+4. **Hand it to the consumer**
+   - Send the `dcm_…` token to the developer integrating your coupons. They send it back on every `POST /api/discount-codes` call as either the `X-API-Key: dcm_…` header or `Authorization: Bearer dcm_…`.
+
+### Why am I getting `Unauthorized.` (401)?
+
+The server validates the in-browser secret before doing anything else. The two most common causes, in order:
+
+| Symptom in the toast / server log                           | Cause                                                                                                                                                                        | Fix                                                                                                                                      |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **`ADMIN_PUBLISH_SECRET is not configured on the server…`** | The Netlify env var is missing on the deployed build.                                                                                                                        | Add it in **Netlify → Site settings → Environment variables** and **redeploy**.                                                          |
+| **`Unauthorized.`**                                         | The secret in **Settings → Public API admin secret** does not byte-match the Netlify env var (typo, whitespace, different value, or you changed one side and not the other). | Re-paste the **exact** Netlify value into the Settings card. If you just changed the Netlify value, redeploy _and_ re-enter in Settings. |
+| Still unauthorized after both fixes                         | Browser cached an old service worker / hard refresh needed, _or_ you're hitting `staging.netlify.app` while your Deploy-preview scope doesn't include the env var.           | Hard refresh (Cmd/Ctrl+Shift+R); add `Deploy previews` to the env var's scope if needed.                                                 |
+
+Sanity-check the two sides match without disclosing the value:
+
+```bash
+# In the Netlify dashboard, copy the env var into your clipboard, then:
+pbpaste | head -c 8   # macOS  — shows first 8 chars
+xclip -o | head -c 8  # Linux
+```
+
+Compare against the first 8 chars your team put in Settings (only share the prefix, not the whole secret). If they line up, the values are the same.
+
+### Token lifecycle
+
+- **Revoke** at any time in **Settings → API tokens** → **Revoke**. The plaintext stops being accepted at `/api/discount-codes` within one request (server re-reads the blob store).
+- **Re-issue** by creating a new token; old plaintexts keep working until you revoke them.
+- **Rotate periodically** (e.g. quarterly) — revoke + re-issue + update the consumer. There's no auto-expiry, so discipline is on you.
+
+---
+
 ## Environment Variables
 
-All env vars below are **server-only** (no `VITE_` prefix). Set them under **Site settings → Environment variables** in the Netlify dashboard.
+All env vars below are **server-only** (no `VITE_` prefix). They are read inside TanStack Start server functions / Netlify Functions and **never** bundled into the browser — so it's safe to put real secrets here. Set them under **Site settings → Environment variables** in the Netlify dashboard, then redeploy.
 
-| Variable               | Required for                                | Notes                                                                                                                           |
-| ---------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `ADMIN_PUBLISH_SECRET` | Public API token mgmt + snapshot publishing | Strong random string. The same value is entered locally in **Settings → Public API admin secret** so the in-browser RPCs match. |
-| `RESEND_API_KEY`       | Email dispatch                              | Resend API key.                                                                                                                 |
-| `RESEND_SENDER_DOMAIN` | Email dispatch                              | Bare domain (`mail.example.com`) or full address (`noreply@example.com`).                                                       |
+| Variable               | Required for                                | Notes                                                                                                                                                                                                                      |
+| ---------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ADMIN_PUBLISH_SECRET` | Public API token mgmt + snapshot publishing | Strong random string. The **same** value is entered locally in **Settings → Public API admin secret** so the in-browser RPCs match. Generate with `openssl rand -hex 32`. See [Managing API tokens](#managing-api-tokens). |
+| `RESEND_API_KEY`       | Email dispatch                              | Resend API key.                                                                                                                                                                                                            |
+| `RESEND_SENDER_DOMAIN` | Email dispatch                              | Bare domain (`mail.example.com`) or full address (`noreply@example.com`).                                                                                                                                                  |
 
-If `ADMIN_PUBLISH_SECRET` is missing, the admin RPCs return an error and the Public API card in Settings shows how to set it. If `RESEND_*` is missing, the email dialog renders an inline configuration note instead of failing silently.
+Behavior when env vars are missing:
+
+- `ADMIN_PUBLISH_SECRET` missing → admin RPCs return `ADMIN_PUBLISH_SECRET is not configured on the server…` and the **Public API admin secret** card in Settings shows setup help. The public `/api/discount-codes` endpoint still works (it only needs API tokens + snapshots).
+- `RESEND_*` missing → the email dialog renders an inline configuration note and offers a `mailto:` fallback instead of failing.
+
+A working `.env.example` lives at the repo root — copy it to `.env` for local development, but **don't** commit `.env`.
 
 ---
 
